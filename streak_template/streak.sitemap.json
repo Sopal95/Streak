@@ -1,0 +1,158 @@
+[
+  {
+    "url": "/",
+    "renderConfig": {
+      "renderId": "homeRenderId",
+      "metadata": {
+        "pageName": "home",
+        "seoTitle": "Hello Streak — Home"
+      },
+      "dataHandler": "HomeDataHandler",
+      "rootLayout": "MainLayout",
+      "widgets": [
+        {
+          "id": "PageHead",
+          "type": "PageHead"
+        },
+        {
+          "id": "HelloNav",
+          "type": "HelloNav"
+        },
+        {
+          "id": "HelloBanner",
+          "type": "HelloBanner"
+        },
+        {
+          "id": "HelloFeatures",
+          "type": "HelloFeatures",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloTerminal",
+          "type": "HelloTerminal",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloAnimated",
+          "type": "HelloAnimated",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloMessage",
+          "type": "HelloMessage",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloFooter",
+          "type": "HelloFooter",
+          "loadingStrategy": "lazy"
+        }
+      ],
+      "version": "1.0.0"
+    }
+  },
+  {
+    "url": "/docs",
+    "renderConfig": {
+      "renderId": "docsRenderId",
+      "metadata": {
+        "pageName": "docs",
+        "seoTitle": "Hello Streak — Docs"
+      },
+      "dataHandler": "HomeDataHandler",
+      "rootLayout": "MainLayout",
+      "widgets": [
+        {
+          "id": "PageHead",
+          "type": "PageHead"
+        },
+        {
+          "id": "HelloNav",
+          "type": "HelloNav"
+        },
+        {
+          "id": "HelloBanner",
+          "type": "HelloBanner"
+        },
+        {
+          "id": "HelloFeatures",
+          "type": "HelloFeatures",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloTerminal",
+          "type": "HelloTerminal",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloAnimated",
+          "type": "HelloAnimated",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloMessage",
+          "type": "HelloMessage",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloFooter",
+          "type": "HelloFooter",
+          "loadingStrategy": "lazy"
+        }
+      ],
+      "version": "1.0.0"
+    }
+  },
+  {
+    "url": "/about",
+    "renderConfig": {
+      "renderId": "aboutRenderId",
+      "metadata": {
+        "pageName": "about",
+        "seoTitle": "Hello Streak — About"
+      },
+      "dataHandler": "HomeDataHandler",
+      "rootLayout": "MainLayout",
+      "widgets": [
+        {
+          "id": "PageHead",
+          "type": "PageHead"
+        },
+        {
+          "id": "HelloNav",
+          "type": "HelloNav"
+        },
+        {
+          "id": "HelloBanner",
+          "type": "HelloBanner"
+        },
+        {
+          "id": "HelloFeatures",
+          "type": "HelloFeatures",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloTerminal",
+          "type": "HelloTerminal",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloAnimated",
+          "type": "HelloAnimated",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloMessage",
+          "type": "HelloMessage",
+          "loadingStrategy": "lazy"
+        },
+        {
+          "id": "HelloFooter",
+          "type": "HelloFooter",
+          "loadingStrategy": "lazy"
+        }
+      ],
+      "version": "1.0.0"
+    }
+  }
+]

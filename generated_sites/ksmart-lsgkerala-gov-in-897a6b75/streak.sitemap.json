@@ -1,0 +1,65 @@
+[
+  {
+    "url": "/",
+    "renderConfig": {
+      "renderId": "homeRenderId",
+      "metadata": {
+        "pageName": "home",
+        "seoTitle": "Ksmart- Delivering Digital happiness"
+      },
+      "dataHandler": "HomeDataHandler",
+      "rootLayout": "MainLayout",
+      "widgets": [
+        {
+          "id": "PageHead",
+          "type": "PageHead"
+        },
+        {
+          "id": "Support",
+          "type": "Support"
+        },
+        {
+          "id": "Feature",
+          "type": "Feature"
+        },
+        {
+          "id": "Hero",
+          "type": "Hero"
+        },
+        {
+          "id": "QuickServices",
+          "type": "QuickServices"
+        },
+        {
+          "id": "Services",
+          "type": "Services"
+        },
+        {
+          "id": "TheLeadership",
+          "type": "TheLeadership"
+        },
+        {
+          "id": "NewsAndEvents",
+          "type": "NewsAndEvents"
+        },
+        {
+          "id": "Features",
+          "type": "Features"
+        },
+        {
+          "id": "Hero2",
+          "type": "Hero2"
+        },
+        {
+          "id": "LocalBodies",
+          "type": "LocalBodies"
+        },
+        {
+          "id": "Footer",
+          "type": "Footer"
+        }
+      ],
+      "version": "1.0.0"
+    }
+  }
+]

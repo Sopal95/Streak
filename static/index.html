@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Website → Streak Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --shell:#0f1729;        /* top bar / outer shell */
+    --bg:#000000;           /* main content background */
+    --surface:#0a1020;      /* inputs, inner panels */
+    --card:#0d1424;         /* cards */
+    --border:#1b2640;
+    --border-strong:#26345a;
+    --accent:#3b5ea8;       /* nav-active / secondary blue */
+    --accent-hover:#4a70c4;
+    --accent2:#38bdf8;      /* cyan highlight */
+    --cyan-grad:linear-gradient(135deg,#00b4ff 0%,#5fd4ff 100%);
+    --brand-blue:#1d4ed8;
+    --accent3:#f59e0b;
+    --text:#e6ebf5;
+    --muted:#8391ad;
+    --success:#22c55e;
+    --error:#ef4444;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { background:var(--shell); }
+  body { background:var(--shell); color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh; overflow-x:hidden; font-size:14px; }
+
+  /* ===== TOP BAR ===== */
+  .topbar { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px; padding:12px 24px; background:var(--shell); border-bottom:1px solid var(--border); }
+  .logo { font-size:1.35rem; font-weight:800; letter-spacing:.02em; color:#fff; }
+  .logo span { color:var(--brand-blue); }
+  .ws-pill { border:1px solid var(--border-strong); border-radius:100px; padding:9px 18px; font-size:.78rem; font-weight:600; color:var(--text); background:rgba(255,255,255,.02); }
+  .topbar .spacer { flex:1; }
+  .topbar .user { text-align:right; line-height:1.25; }
+  .topbar .user b { display:block; font-size:.78rem; }
+  .topbar .user small { color:var(--muted); font-size:.72rem; }
+
+  .shell-main { background:var(--bg); min-height:calc(100vh - 62px); position:relative; }
+  .container { position:relative; z-index:1; max-width:1040px; margin:0 auto; padding:28px 20px 100px; }
+
+  /* ===== HERO ===== */
+  header.hero {
+    position:relative; overflow:hidden; margin-bottom:22px; padding:34px 36px;
+    border-radius:16px; border:1px solid var(--border);
+    background:
+      radial-gradient(520px 260px at 100% 0%, rgba(0,160,255,.55), transparent 70%),
+      radial-gradient(380px 220px at 0% 100%, rgba(56,189,248,.22), transparent 70%),
+      linear-gradient(180deg,#0a1830 0%,#071022 100%);
+  }
+  header.hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:linear-gradient(rgba(120,170,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,170,255,.05) 1px,transparent 1px);
+    background-size:34px 34px;
+  }
+  header.hero > * { position:relative; }
+  .badge {
+    display:inline-flex; align-items:center; gap:8px; background:rgba(56,189,248,.08);
+    border:1px solid rgba(56,189,248,.55); color:var(--accent2); font-weight:700;
+    font-size:11px; padding:7px 14px; border-radius:100px; margin-bottom:18px; letter-spacing:.06em; text-transform:uppercase;
+  }
+  h1 { font-size:clamp(1.7rem,4vw,2.5rem); font-weight:700; line-height:1.15; margin-bottom:12px; color:#fff; letter-spacing:-.01em; }
+  h1 em { font-style:normal; color:var(--accent2); }
+  .subtitle { color:#a9b6cf; font-size:.95rem; max-width:640px; line-height:1.7; }
+
+  /* ===== MODE TABS ===== */
+  .mode-tabs { display:flex; gap:4px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:4px; margin-bottom:22px; flex-wrap:wrap; }
+  .mode-tab {
+    flex:1; min-width:140px; padding:11px 14px; border-radius:7px; border:none; background:transparent;
+    color:var(--muted); font-family:inherit; font-weight:600; font-size:.88rem; cursor:pointer; transition:all .2s; text-align:center;
+  }
+  .mode-tab.active { background:var(--accent); color:#fff; }
+  .mode-tab:hover:not(.active) { color:var(--text); background:var(--border); }
+
+  /* ===== STEPS ===== */
+  .steps { display:flex; align-items:center; justify-content:center; margin-bottom:24px; flex-wrap:wrap; gap:4px; }
+  .step { display:flex; align-items:center; gap:9px; padding:9px 16px; border-radius:8px; font-size:.8rem; font-weight:600; color:var(--muted); }
+  .step.active { color:var(--text); } .step.done { color:var(--success); }
+  .step-num { width:26px; height:26px; border-radius:50%; border:2px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; }
+  .step.active .step-num { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 0 14px rgba(59,94,168,.6); }
+  .step.done .step-num { background:var(--success); border-color:var(--success); color:#fff; }
+  .step-arrow { color:var(--border-strong); font-size:18px; }
+
+  /* ===== CARDS ===== */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; margin-bottom:22px; transition:border-color .25s; }
+  .card:hover { border-color:var(--border-strong); }
+  .card-title { font-size:.9rem; font-weight:700; color:var(--text); margin-bottom:18px; display:flex; align-items:center; gap:10px; }
+  .card-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  textarea, input[type=text] {
+    width:100%; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px;
+    color:var(--text); font-family:inherit; font-size:.9rem; outline:none; transition:all .2s; resize:vertical;
+  }
+  textarea { min-height:120px; line-height:1.6; }
+  textarea:focus, input[type=text]:focus { border-color:var(--accent2); box-shadow:0 0 0 3px rgba(56,189,248,.14); }
+  ::placeholder { color:#55637f; }
+  .input-group { display:flex; gap:10px; flex-wrap:wrap; }
+  .input-group input[type=text] { flex:1; min-width:200px; width:auto; }
+  .field-label { font-size:.78rem; font-weight:500; color:var(--muted); margin-bottom:8px; display:block; }
+  .field { margin-bottom:16px; }
+  .check { display:flex; align-items:center; gap:8px; margin-top:14px; font-size:.82rem; color:var(--muted); cursor:pointer; }
+  .check input { accent-color:var(--accent2); }
+
+  .examples { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .example-chip { background:rgba(56,189,248,.07); border:1px solid rgba(56,189,248,.28); color:#7dd3fc; font-size:.76rem; padding:6px 12px; border-radius:100px; cursor:pointer; transition:all .2s; }
+  .example-chip:hover { background:rgba(56,189,248,.15); }
+
+  .dropzone { border:2px dashed var(--border-strong); border-radius:12px; padding:36px 20px; text-align:center; cursor:pointer; transition:all .2s; background:var(--surface); }
+  .dropzone:hover, .dropzone.dragover { border-color:var(--accent2); background:rgba(56,189,248,.05); }
+  .dropzone p { color:var(--muted); font-size:.85rem; margin-top:8px; }
+  .dropzone .icon { font-size:2rem; opacity:.7; }
+  #imagePreviewWrap { margin-top:14px; display:none; }
+  #imagePreviewWrap img { max-width:100%; max-height:280px; border-radius:10px; border:1px solid var(--border); display:block; margin:0 auto; }
+  #imagePreviewWrap .filename { text-align:center; color:var(--muted); font-size:.78rem; margin-top:8px; }
+
+  /* ===== BUTTONS ===== */
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:12px 22px; border-radius:8px; font-family:inherit; font-weight:700; font-size:.88rem; cursor:pointer; border:none; transition:all .2s; white-space:nowrap; }
+  .btn-primary { background:var(--cyan-grad); color:#fff; box-shadow:0 4px 18px rgba(0,180,255,.3); text-shadow:0 1px 1px rgba(0,60,100,.25); }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+  .btn-primary:disabled { opacity:.45; cursor:not-allowed; box-shadow:none; }
+  .btn-secondary { background:#000; color:var(--text); border:1px solid var(--border-strong); }
+  .btn-secondary:hover:not(:disabled) { border-color:var(--accent2); color:var(--accent2); }
+  .btn-success { background:var(--accent); color:#fff; }
+  .btn-success:hover { background:var(--accent-hover); transform:translateY(-1px); }
+
+  /* ===== STATUS ===== */
+  .status-bar { display:flex; align-items:center; gap:12px; padding:11px 16px; border-radius:8px; font-size:.82rem; margin-top:14px; min-height:42px; }
+  .status-bar.idle { background:rgba(131,145,173,.08); color:var(--muted); border:1px solid var(--border); }
+  .status-bar.loading { background:rgba(56,189,248,.08); color:#7dd3fc; border:1px solid rgba(56,189,248,.3); }
+  .status-bar.success { background:rgba(34,197,94,.08); color:var(--success); border:1px solid rgba(34,197,94,.3); }
+  .status-bar.error { background:rgba(239,68,68,.08); color:var(--error); border:1px solid rgba(239,68,68,.3); }
+  .spinner { width:15px; height:15px; flex-shrink:0; border:2px solid rgba(125,211,252,.3); border-top-color:#7dd3fc; border-radius:50%; animation:spin .8s linear infinite; }
+
+  .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:14px; }
+  .stat-item { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .stat-label { font-size:.7rem; color:var(--muted); font-weight:500; margin-bottom:4px; }
+  .stat-value { font-size:1rem; font-weight:700; word-break:break-word; }
+  .stat-value.ok { color:var(--success); } .stat-value.warn { color:var(--accent3); } .stat-value.bad { color:var(--error); }
+  .code-preview { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px; font-family:var(--mono); font-size:.76rem; color:#94a3b8; max-height:170px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin-top:14px; }
+
+  /* ===== OUTPUT TABS ===== */
+  .tabs { display:flex; gap:4px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:4px; margin-bottom:18px; flex-wrap:wrap; }
+  .tab { flex:1; min-width:90px; padding:9px 14px; border-radius:7px; border:none; background:transparent; color:var(--muted); font-family:inherit; font-weight:600; font-size:.83rem; cursor:pointer; transition:all .2s; text-align:center; }
+  .tab.active { background:var(--accent); color:#fff; }
+  .tab:hover:not(.active) { color:var(--text); background:var(--border); }
+
+  .preview-wrapper { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:#fff; }
+  .preview-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:9px 14px; display:flex; align-items:center; gap:7px; }
+  .dot { width:10px; height:10px; border-radius:50%; } .dot.r{background:#ef4444} .dot.y{background:#f59e0b} .dot.g{background:#22c55e}
+  .preview-url { flex:1; margin:0 10px; background:#000; border:1px solid var(--border); border-radius:6px; padding:4px 11px; font-size:.73rem; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #previewFrame { width:100%; height:600px; border:none; display:block; }
+
+  .gen-code { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px; font-family:var(--mono); font-size:.76rem; color:#94a3b8; max-height:500px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.7; }
+  .code-toolbar { display:flex; align-items:center; gap:10px; background:#060b17; border:1px solid var(--border); border-bottom:2px solid var(--border); border-radius:10px 10px 0 0; padding:10px 16px; }
+  .code-toolbar + .gen-code { border-radius:0 0 10px 10px; border-top:none; }
+  .code-lang-badge { font-size:.72rem; font-weight:700; padding:3px 10px; border-radius:5px; }
+  .jsx-badge { background:rgba(56,189,248,.18); color:#7dd3fc; border:1px solid rgba(56,189,248,.35); }
+  .css-badge { background:rgba(96,165,250,.18); color:#93c5fd; border:1px solid rgba(96,165,250,.35); }
+  .code-line-count { font-size:.72rem; color:var(--muted); margin-left:4px; }
+  .copy-btn { margin-left:auto; background:transparent; border:1px solid var(--border-strong); color:var(--muted); border-radius:6px; padding:4px 12px; font-family:inherit; font-size:.72rem; cursor:pointer; transition:all .2s; }
+  .copy-btn:hover { border-color:var(--accent2); color:var(--accent2); }
+  .copy-btn.copied { border-color:var(--success); color:var(--success); }
+
+  .output-actions { display:flex; gap:9px; flex-wrap:wrap; margin-top:14px; }
+  .endpoint-pill { display:inline-flex; align-items:center; gap:8px; background:rgba(56,189,248,.06); border:1px solid rgba(56,189,248,.22); border-radius:8px; padding:8px 14px; font-family:var(--mono); font-size:.74rem; color:#7dd3fc; margin-top:10px; }
+  .method { background:var(--accent); color:#fff; padding:2px 7px; border-radius:4px; font-size:.7rem; font-weight:700; }
+  .meta-box { margin-bottom:16px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:.78rem; color:var(--muted); }
+
+  .conf-box { margin-bottom:16px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+  .conf-head { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .conf-score { font-size:2rem; font-weight:800; }
+  .conf-score.ok { color:var(--success); } .conf-score.warn { color:var(--accent3); } .conf-score.bad { color:var(--error); }
+  .conf-pill { font-size:.72rem; padding:4px 10px; border-radius:100px; border:1px solid var(--border-strong); }
+  .conf-pill.pass { color:var(--success); border-color:rgba(34,197,94,.4); }
+  .conf-pill.fail { color:var(--error); border-color:rgba(239,68,68,.4); }
+  .conf-bar { position:relative; height:8px; background:var(--border); border-radius:6px; margin:14px 0 6px; }
+  .conf-fill { height:100%; border-radius:6px; background:var(--cyan-grad); }
+  .conf-mark { position:absolute; top:-4px; width:2px; height:16px; background:var(--accent3); }
+  .conf-note { font-size:.72rem; color:var(--muted); }
+
+  /* ===== PROGRESS ===== */
+  .prog-card { padding:22px 26px; border:1px dashed var(--border-strong); background:linear-gradient(180deg,#0b1428 0%,#080e1c 100%); }
+  .prog-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; font-size:.84rem; flex-wrap:wrap; }
+  .prog-label { color:var(--text); font-weight:700; }
+  .prog-right { display:flex; align-items:center; gap:14px; }
+  .prog-elapsed { color:var(--muted); font-size:.76rem; }
+  .prog-pct { color:var(--accent2); font-weight:700; min-width:40px; text-align:right; }
+  .prog-track { height:12px; background:var(--border); border-radius:8px; overflow:hidden; position:relative; }
+  .prog-fill { height:100%; width:0; border-radius:8px; background:var(--cyan-grad); transition:width .35s ease; position:relative; overflow:hidden; }
+  .prog-fill::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent); transform:translateX(-100%); animation:shimmer 1.4s infinite; }
+  .prog-fill.done, .prog-fill.fail { animation:none; }
+  .prog-fill.done::after, .prog-fill.fail::after { display:none; }
+  .prog-fill.done { background:var(--success); } .prog-fill.fail { background:var(--error); }
+  .prog-stages { display:flex; justify-content:space-between; margin-top:14px; gap:6px; }
+  .prog-stage { flex:1; font-size:.7rem; font-weight:500; color:var(--muted); text-align:center; padding-top:8px; border-top:3px solid var(--border); transition:all .3s; }
+  .prog-stage.active { color:#7dd3fc; border-color:var(--accent2); }
+  .prog-stage.done { color:var(--success); border-color:var(--success); }
+  .prog-stage.fail { color:var(--error); border-color:var(--error); }
+  .prog-cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }
+  .prog-panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .prog-panel-title { font-size:.72rem; font-weight:600; color:var(--muted); margin-bottom:8px; }
+  .prog-steps { list-style:none; max-height:190px; overflow-y:auto; }
+  .prog-steps li { display:flex; align-items:center; gap:9px; font-size:.76rem; color:var(--muted); padding:4px 0; }
+  .prog-steps .ico { width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; }
+  .prog-steps li.active { color:var(--text); }
+  .prog-steps li.active .ico { border:2px solid rgba(125,211,252,.3); border-top-color:#7dd3fc; border-radius:50%; animation:spin .8s linear infinite; font-size:0; }
+  .prog-steps li.done { color:var(--success); }
+  .prog-steps li.fail { color:var(--error); }
+  .prog-log { max-height:190px; overflow-y:auto; font-family:var(--mono); font-size:.7rem; line-height:1.65; color:#94a3b8; }
+  .prog-log .plog.ok { color:var(--success); } .prog-log .plog.err { color:var(--error); } .prog-log .plog.info { color:#7dd3fc; }
+  .prog-note { margin-top:10px; font-size:.7rem; color:var(--muted); }
+
+  @keyframes spin { to{transform:rotate(360deg)} }
+  @keyframes shimmer { to{transform:translateX(100%)} }
+  .hidden { display:none !important; }
+  @media(max-width:700px){ .step-arrow{display:none} .card{padding:18px} header.hero{padding:24px 20px} .prog-cols{grid-template-columns:1fr} .prog-stage{font-size:.62rem} .topbar .user{display:none} }
+  @media (prefers-reduced-motion:reduce){ .prog-fill::after, .spinner{animation:none} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><span>N</span>EXUS</div>
+  <div class="ws-pill">Website → Streak Studio</div>
+  <div class="spacer"></div>
+  <div class="user"><b>Streak.Js</b><small>Clone &amp; Convert</small></div>
+</div>
+
+<div class="shell-main">
+<div class="container">
+
+  <header class="hero">
+    <div class="badge">FastAPI · Playwright</div>
+    <h1>Website → <em>Streak Studio</em></h1>
+    <p class="subtitle">Clone a live URL deterministically, or let an LLM build a Streak project from a description or a screenshot. Every mode produces the same runnable Vite + Streak project with a live preview and zip download.</p>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="modeUrlBtn" onclick="setMode('url')">🌐 Clone from URL</button>
+    <button class="mode-tab" id="modeTextBtn" onclick="setMode('text')">✎ AI: Describe it</button>
+    <button class="mode-tab" id="modeImageBtn" onclick="setMode('image')">🖼 AI: Screenshot</button>
+  </div>
+
+  <!-- ============ PROGRESS (shared by all modes) ============ -->
+  <div class="card prog-card hidden" id="progressCard">
+    <div class="prog-head">
+      <span class="prog-label" id="progLabel">Idle</span>
+      <span class="prog-right">
+        <span class="prog-elapsed" id="progElapsed">⏱ 00:00</span>
+        <span class="prog-pct" id="progPct">0%</span>
+      </span>
+    </div>
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <div class="prog-stages">
+      <div class="prog-stage" id="pst0">Stage 1</div>
+      <div class="prog-stage" id="pst1">Stage 2</div>
+      <div class="prog-stage" id="pst2">Stage 3</div>
+      <div class="prog-stage" id="pst3">Stage 4</div>
+    </div>
+    <div class="prog-cols">
+      <div class="prog-panel">
+        <div class="prog-panel-title">Current tasks</div>
+        <ul class="prog-steps" id="progSteps"></ul>
+      </div>
+      <div class="prog-panel">
+        <div class="prog-panel-title">Activity log</div>
+        <div class="prog-log" id="progLog"></div>
+      </div>
+    </div>
+    <div class="prog-note" id="progNote"></div>
+  </div>
+
+  <!-- ============ URL MODE ============ -->
+  <div id="urlMode">
+    <div class="steps">
+      <div class="step active" id="step1"><div class="step-num">1</div><span>Enter URL</span></div>
+      <div class="step-arrow">→</div>
+      <div class="step" id="step2"><div class="step-num">2</div><span>Render Page</span></div>
+      <div class="step-arrow">→</div>
+      <div class="step" id="step3"><div class="step-num">3</div><span>Clone to Streak</span></div>
+      <div class="step-arrow">→</div>
+      <div class="step" id="step4"><div class="step-num">4</div><span>Preview</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Enter website URL</div>
+      <div class="input-group">
+        <input type="text" id="urlInput" placeholder="https://example.com" />
+        <button class="btn btn-primary" id="fetchBtn" onclick="fetchHTML()">⬇ Render with Playwright</button>
+      </div>
+      <div class="endpoint-pill"><span class="method">POST</span>/api/fetch — FastAPI + Playwright</div>
+      <div class="status-bar idle" id="fetchStatus"><span>Ready — enter any public URL above</span></div>
+    </div>
+
+    <div class="card hidden" id="htmlCard">
+      <div class="card-title">Page rendered &amp; verified</div>
+      <div class="stats-row" id="statsRow"></div>
+      <div class="code-preview" id="htmlPreview"></div>
+      <label class="check"><input type="checkbox" id="tailwindCheck" checked> Convert CSS to Tailwind with LLM</label>
+      <label class="check"><input type="checkbox" id="confCheck" checked> Measure clone confidence (original vs clone)</label>
+      <div class="field" style="margin-top:12px;max-width:260px;">
+        <label class="field-label">Confidence threshold (%)</label>
+        <input type="text" id="thresholdInput" value="80">
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+        <button class="btn btn-primary" id="convertBtn" onclick="convertHTML()">✦ Clone to Streak</button>
+        <button class="btn btn-secondary" onclick="resetAll()">↺ Reset</button>
+      </div>
+      <div class="endpoint-pill"><span class="method">POST</span>/api/convert — Playwright → Streak (+ Tailwind)</div>
+      <div class="status-bar idle" id="convertStatus"><span>Page rendered — click Clone to Streak to generate the project</span></div>
+    </div>
+  </div>
+
+  <!-- ============ AI TEXT MODE ============ -->
+  <div class="card hidden" id="textCard">
+    <div class="card-title">Describe the website you want</div>
+    <div class="field">
+      <label class="field-label">Description</label>
+      <textarea id="descriptionInput" placeholder="Build a food delivery dashboard with restaurants, orders, customers and analytics"></textarea>
+      <div class="examples">
+        <span class="example-chip" onclick="fillExample(this)">Build a food delivery dashboard with restaurants, orders, customers and analytics</span>
+        <span class="example-chip" onclick="fillExample(this)">A SaaS pricing page with 3 tiers and a feature comparison table</span>
+        <span class="example-chip" onclick="fillExample(this)">A personal portfolio site with projects, skills, and a contact form</span>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Site name (optional)</label>
+      <input type="text" id="siteNameInput" placeholder="e.g. FoodFlow Dashboard">
+    </div>
+    <button class="btn btn-primary" id="generateTextBtn" onclick="generateFromText()">✦ Generate Website</button>
+    <div class="endpoint-pill"><span class="method">POST</span>/api/ai/generate-from-text — OpenRouter</div>
+    <div class="status-bar idle" id="textStatus"><span>Ready — describe the site you want above</span></div>
+  </div>
+
+  <!-- ============ AI IMAGE MODE ============ -->
+  <div class="card hidden" id="imageCard">
+    <div class="card-title">Upload a screenshot to clone</div>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('imageInput').click()">
+      <div class="icon">📷</div>
+      <p><strong>Click to upload</strong> or drag &amp; drop a screenshot (PNG/JPG)</p>
+      <input type="file" id="imageInput" accept="image/*" class="hidden">
+    </div>
+    <div id="imagePreviewWrap">
+      <img id="imagePreviewImg" alt="Uploaded screenshot preview">
+      <div class="filename" id="imageFilename"></div>
+    </div>
+    <div class="field" style="margin-top:16px;">
+      <label class="field-label">Notes for the AI (optional)</label>
+      <input type="text" id="imageNotesInput" placeholder="e.g. make the sidebar collapsible, use a blue accent color">
+    </div>
+    <button class="btn btn-primary" id="generateImageBtn" onclick="generateFromImage()" disabled>✦ Clone This Design</button>
+    <div class="endpoint-pill"><span class="method">POST</span>/api/ai/generate-from-image — OpenRouter (vision)</div>
+    <div class="status-bar idle" id="imageStatus"><span>Ready — upload a screenshot above</span></div>
+  </div>
+
+  <!-- ============ SHARED OUTPUT ============ -->
+  <div class="card hidden" id="outputCard">
+    <div class="card-title" id="outputTitle">Generated Streak Project</div>
+    <div class="meta-box" id="siteMeta"></div>
+    <div class="conf-box hidden" id="confBox"></div>
+
+    <div class="tabs" id="outputTabs">
+      <button class="tab active" onclick="showTab('preview',this)">🖥 Live Preview</button>
+      <button class="tab" onclick="showTab('app',this)">🧩 App.jsx</button>
+      <button class="tab" onclick="showTab('components',this)">🎛 Components</button>
+      <button class="tab" onclick="showTab('css',this)">🎨 index.css</button>
+    </div>
+
+    <div id="previewPane">
+      <div class="preview-wrapper">
+        <div class="preview-bar">
+          <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+          <div class="preview-url" id="previewUrl">preview</div>
+        </div>
+        <iframe id="previewFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+      </div>
+    </div>
+
+    <div id="appPane" class="hidden">
+      <div class="code-toolbar">
+        <span class="code-lang-badge jsx-badge">JSX</span>
+        <span class="code-line-count" id="appLines"></span>
+        <span class="code-line-count" style="margin-left:auto;margin-right:10px;">src/App.jsx</span>
+        <button class="copy-btn" onclick="copyCode('appOutput', this)">⎘ Copy</button>
+      </div>
+      <div class="gen-code" id="appOutput"></div>
+    </div>
+
+    <div id="componentsPane" class="hidden">
+      <div class="tabs" id="componentPicker" style="margin-bottom:12px;"></div>
+      <div class="code-toolbar">
+        <span class="code-lang-badge jsx-badge">JSX</span>
+        <span class="code-line-count" id="componentLines"></span>
+        <span class="code-line-count" id="componentFilename" style="margin-left:auto;margin-right:10px;"></span>
+        <button class="copy-btn" onclick="copyCode('componentOutput', this)">⎘ Copy</button>
+      </div>
+      <div class="gen-code" id="componentOutput"></div>
+    </div>
+
+    <div id="cssPane" class="hidden">
+      <div class="code-toolbar">
+        <span class="code-lang-badge css-badge">CSS</span>
+        <span class="code-line-count" id="cssLines"></span>
+        <span class="code-line-count" style="margin-left:auto;margin-right:10px;">src/index.css</span>
+        <button class="copy-btn" onclick="copyCode('cssOutput', this)">⎘ Copy</button>
+      </div>
+      <div class="gen-code" id="cssOutput"></div>
+    </div>
+
+    <div class="output-actions">
+      <button class="btn btn-success" onclick="downloadZip()">⬇ Download Streak Project (.zip)</button>
+      <button class="btn btn-secondary" onclick="resetAll()">↺ Start Over</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script type="text/javascript">
+(function() {
+  'use strict';
+
+  var API = '';
+  var currentURL = '';
+  var bundle = null;
+  var uploadedFile = null;
+
+  function qs(id) { return document.getElementById(id); }
+
+  function setStatus(id, type, msg) {
+    var el = qs(id);
+    el.className = 'status-bar ' + type;
+    el.innerHTML = type === 'loading'
+      ? '<div class="spinner"></div><span>' + msg + '</span>'
+      : '<span>' + msg + '</span>';
+  }
+  function setStep(n, state) {
+    var el = qs('step' + n);
+    if (!el) return;
+    el.className = 'step' + (state ? ' ' + state : '');
+    el.querySelector('.step-num').textContent = state === 'done' ? '\u2713' : n;
+  }
+  function escapeHTML(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function lineCount(s) { var n = s.split('\n').length; return n + ' line' + (n !== 1 ? 's' : ''); }
+
+  // ══════════════════════════════════════════════════════════════
+  // PROGRESS ENGINE
+  // The backend answers each phase with a single response, so the
+  // sub-task checklist and the % inside a phase are ESTIMATED from
+  // elapsed time. Phase boundaries, log facts, and completion/failure
+  // are driven by the real responses.
+  // ══════════════════════════════════════════════════════════════
+  var URL_STAGES  = ['HTML fetching', 'Fetched \u00B7 analysing', 'Streak conversion', 'Completed'];
+  var TEXT_STAGES = ['Request sent', 'AI generating', 'Building project', 'Completed'];
+  var IMG_STAGES  = ['Uploading', 'AI analysing', 'Building project', 'Completed'];
+
+  var FETCH_STEPS = [
+    ['Launching headless browser', 2], ['Loading page', 6], ['Waiting for network idle', 6],
+    ['Scrolling to trigger lazy content', 4], ['Extracting rendered HTML', 2]
+  ];
+  var ANALYSE_STEPS = [
+    'HTML rendered', 'DOM parsed', 'Libraries detected', 'Ready to convert'
+  ];
+  var TEXT_STEPS = [
+    ['Sending description to AI', 3], ['Planning pages & components', 12], ['Generating Streak code', 25],
+    ['Assembling project files', 5], ['Building live preview', 4], ['Packaging zip', 3]
+  ];
+  var IMG_STEPS = [
+    ['Uploading screenshot', 3], ['Analysing layout & colours', 12], ['Generating Streak code', 30],
+    ['Assembling project files', 5], ['Building live preview', 4], ['Packaging zip', 3]
+  ];
+
+  function convertSteps(tw, conf) {
+    var s = [
+      ['Re-rendering page with Playwright', 12], ['Resolving lazy-load attributes', 2],
+      ['Inlining stylesheets', 6], ['Downloading images, fonts & media', 22],
+      ['Optimising images & CSS', 6], ['Planning page sections', 2],
+      ['Generating JSX widgets & layout', 4]
+    ];
+    if (tw) s.push(['Converting CSS to Tailwind', 15]);
+    s.push(['Writing Streak project files', 3]);
+    s.push(['Packaging zip', 3]);
+    if (conf) s.push(['Measuring clone confidence', 25]);
+    return s;
+  }
+
+  var P = { job: null, tick: null, clock: null, t0: 0, pct: 0, chain: false, stages: URL_STAGES };
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function mmss(ms) { var s = Math.floor(ms / 1000); return pad2(Math.floor(s / 60)) + ':' + pad2(s % 60); }
+
+  function plog(msg, type) {
+    var box = qs('progLog');
+    var d = document.createElement('div');
+    d.className = 'plog' + (type ? ' ' + type : '');
+    d.textContent = '[' + mmss(Date.now() - P.t0) + '] ' + msg;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function pSetPct(pct, state, label) {
+    P.pct = pct;
+    var f = qs('progFill');
+    f.style.width = pct + '%';
+    f.className = 'prog-fill' + (state ? ' ' + state : '');
+    qs('progPct').textContent = Math.round(pct) + '%';
+    if (label) qs('progLabel').textContent = label;
+  }
+
+  function pStages(labels, idx, state) {
+    P.stages = labels;
+    for (var i = 0; i < 4; i++) {
+      var el = qs('pst' + i);
+      el.textContent = labels[i];
+      var cls = 'prog-stage';
+      if (i < idx) cls += ' done';
+      else if (i === idx) cls += state === 'fail' ? ' fail' : (state === 'done' ? ' done' : ' active');
+      el.className = cls;
+    }
+  }
+
+  function pRenderSteps(labels) {
+    var ul = qs('progSteps');
+    ul.innerHTML = '';
+    labels.forEach(function(l) {
+      var li = document.createElement('li');
+      li.innerHTML = '<span class="ico">\u25CB</span><span></span>';
+      li.lastChild.textContent = l;
+      ul.appendChild(li);
+    });
+  }
+
+  function pMarkSteps(activeIdx, state) {
+    var items = qs('progSteps').children;
+    for (var i = 0; i < items.length; i++) {
+      var cls = '', ico = '\u25CB';
+      if (state === 'done' || i < activeIdx) { cls = 'done'; ico = '\u2713'; }
+      else if (i === activeIdx) {
+        if (state === 'fail') { cls = 'fail'; ico = '\u2717'; } else { cls = 'active'; ico = ''; }
+      }
+      items[i].className = cls;
+      items[i].firstChild.textContent = ico;
+      if (cls === 'active') items[i].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function pStopJob() { if (P.tick) { clearInterval(P.tick); P.tick = null; } P.job = null; }
+  function pStopClock() { if (P.clock) { clearInterval(P.clock); P.clock = null; } }
+
+  function pStartClock() {
+    pStopClock();
+    P.clock = setInterval(function() {
+      qs('progElapsed').textContent = '\u23F1 ' + mmss(Date.now() - P.t0);
+    }, 500);
+  }
+
+  // begin a brand-new run (fresh log + timer)
+  function pBegin() {
+    pStopJob(); pStopClock();
+    P.t0 = Date.now(); P.chain = false;
+    qs('progLog').innerHTML = '';
+    qs('progNote').textContent = '';
+    qs('progElapsed').textContent = '\u23F1 00:00';
+    qs('progressCard').classList.remove('hidden');
+    pSetPct(0, '', '');
+    pStartClock();
+  }
+
+  // run a timed phase. cfg: {label, stages, stage, steps:[[label,estSeconds]], from, to, note}
+  function pRun(cfg) {
+    pStopJob();
+    if (!P.clock) pStartClock();
+    var labels = cfg.steps.map(function(s) { return s[0]; });
+    var est = cfg.steps.map(function(s) { return s[1]; });
+    var total = est.reduce(function(a, b) { return a + b; }, 0);
+    pStages(cfg.stages, cfg.stage);
+    pRenderSteps(labels);
+    pSetPct(cfg.from, '', cfg.label);
+    qs('progNote').textContent = cfg.note || 'Sub-task timing is estimated; stage changes and results are real.';
+    plog(cfg.label, 'info');
+
+    var t0 = Date.now(), lastIdx = -1;
+    P.job = { cfg: cfg };
+    function tick() {
+      var el = (Date.now() - t0) / 1000;
+      var idx = labels.length - 1, cum = 0;
+      for (var i = 0; i < est.length; i++) {
+        if (el < cum + est[i]) { idx = i; break; }
+        cum += est[i];
+      }
+      var frac = el < total ? (el / total) * 0.9 : 0.9 + 0.08 * (1 - Math.exp(-(el - total) / 20));
+      pSetPct(cfg.from + (cfg.to - cfg.from) * frac, '', cfg.label);
+      if (idx !== lastIdx) {
+        if (lastIdx >= 0) plog('\u2713 ' + labels[lastIdx]);
+        plog('\u2192 ' + labels[idx]);
+        pMarkSteps(idx);
+        lastIdx = idx;
+      }
+      if (el > total + 5) {
+        qs('progLabel').textContent = cfg.label + ' (still working\u2026)';
+      }
+    }
+    P.tick = setInterval(tick, 250);
+    tick();
+  }
+
+  // finish current phase successfully
+  // opts: {label, pct, stage, final, steps (optional static done-list)}
+  function pDone(opts) {
+    var wasRunning = !!P.job;
+    pStopJob();
+    if (wasRunning) {
+      var items = qs('progSteps').children;
+      for (var i = 0; i < items.length; i++) { items[i].className = 'done'; items[i].firstChild.textContent = '\u2713'; }
+    }
+    if (opts.steps) { pRenderSteps(opts.steps); pMarkSteps(-1, 'done'); }
+    pStages(P.stages, opts.final ? 3 : opts.stage, opts.final ? 'done' : '');
+    pSetPct(opts.pct, opts.final ? 'done' : '', opts.label);
+    plog(opts.label, 'ok');
+    if (opts.final) {
+      pStopClock();
+      qs('progElapsed').textContent = '\u23F1 ' + mmss(Date.now() - P.t0);
+      qs('progNote').textContent = 'Finished in ' + mmss(Date.now() - P.t0) + '.';
+      P.chain = false;
+    }
+  }
+
+  function pFail(msg) {
+    var items = qs('progSteps').children, activeIdx = -1;
+    for (var i = 0; i < items.length; i++) { if (items[i].className === 'active') { activeIdx = i; break; } }
+    pStopJob(); pStopClock();
+    if (activeIdx >= 0) pMarkSteps(activeIdx, 'fail');
+    var stageIdx = 0;
+    for (var s = 0; s < 4; s++) { if (qs('pst' + s).className.indexOf('active') !== -1) stageIdx = s; }
+    pStages(P.stages, stageIdx, 'fail');
+    pSetPct(P.pct, 'fail', 'Failed');
+    plog('\u2717 ' + msg, 'err');
+    qs('progNote').textContent = 'Stopped after ' + mmss(Date.now() - P.t0) + '.';
+  }
+
+  function pHide() {
+    pStopJob(); pStopClock();
+    P.chain = false; P.pct = 0;
+    qs('progressCard').classList.add('hidden');
+    qs('progLog').innerHTML = '';
+    qs('progSteps').innerHTML = '';
+  }
+
+  // ── MODE SWITCH ──────────────────────────────────────────────
+  window.setMode = function(mode) {
+    qs('modeUrlBtn').classList.toggle('active', mode === 'url');
+    qs('modeTextBtn').classList.toggle('active', mode === 'text');
+    qs('modeImageBtn').classList.toggle('active', mode === 'image');
+    qs('urlMode').classList.toggle('hidden', mode !== 'url');
+    qs('textCard').classList.toggle('hidden', mode !== 'text');
+    qs('imageCard').classList.toggle('hidden', mode !== 'image');
+  };
+
+  window.fillExample = function(el) {
+    qs('descriptionInput').value = el.textContent;
+    qs('descriptionInput').focus();
+  };
+
+  // ── URL MODE: render ─────────────────────────────────────────
+  window.fetchHTML = async function() {
+    var url = qs('urlInput').value.trim();
+    if (!url) { alert('Please enter a URL'); return; }
+    currentURL = url;
+
+    setStatus('fetchStatus', 'loading', 'Calling /api/fetch \u2014 launching Playwright \u2026');
+    qs('fetchBtn').disabled = true;
+    setStep(2, 'active');
+
+    pBegin();
+    pRun({ label: 'Fetching HTML\u2026', stages: URL_STAGES, stage: 0, steps: FETCH_STEPS, from: 2, to: 38 });
+    plog('Target: ' + url);
+
+    try {
+      var res = await fetch(API + '/api/fetch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Fetch failed');
+
+      renderHTMLCard(data);
+      setStatus('fetchStatus', 'success',
+        '\u2705 ' + data.statusCode + ' OK \u2014 ' + (data.htmlLength / 1024).toFixed(1) + ' KB rendered from ' + data.url +
+        (data.usedPlaywright ? ' (via headless browser)' : ''));
+      setStep(1, 'done'); setStep(2, 'done'); setStep(3, 'active');
+
+      // real facts from the response
+      plog('HTTP ' + data.statusCode + ' \u2014 ' + (data.htmlLength / 1024).toFixed(1) + ' KB' +
+           (data.usedPlaywright ? ' (headless browser)' : ' (plain HTTP)'));
+      pDone({ label: 'HTML fetched \u2014 analysing page', pct: 40, stage: 1, steps: ANALYSE_STEPS });
+      plog('Title: ' + (data.title || '\u2014'));
+      plog(data.tags.tagCount + ' tags, ' + data.tags.linkCount + ' links, nav: ' + (data.tags.hasNav ? 'yes' : 'no') +
+           ', footer: ' + (data.tags.hasFooter ? 'yes' : 'no'));
+      plog('Libraries: ' + ((data.detectedLibraries || []).join(', ') || 'none detected'));
+      plog('Ready \u2014 click \u201CClone to Streak\u201D to continue', 'info');
+      P.chain = true;
+    } catch (err) {
+      setStatus('fetchStatus', 'error', '\u274C ' + err.message);
+      setStep(2, '');
+      pFail('Fetch failed: ' + err.message);
+    } finally {
+      qs('fetchBtn').disabled = false;
+    }
+  };
+
+  function renderHTMLCard(d) {
+    qs('htmlCard').classList.remove('hidden');
+    var libs = (d.detectedLibraries || []).join(', ') || '\u2014';
+    var stats = [
+      { label: 'Status', value: d.statusCode === 200 ? '200 OK' : d.statusCode, cls: d.statusCode === 200 ? 'ok' : 'bad' },
+      { label: 'File Size', value: (d.htmlLength / 1024).toFixed(1) + ' KB', cls: 'ok' },
+      { label: 'Title', value: escapeHTML(d.title || '\u2014'), cls: 'ok' },
+      { label: 'Tags Found', value: d.tags.tagCount, cls: 'ok' },
+      { label: 'Links', value: d.tags.linkCount, cls: 'ok' },
+      { label: 'Has Nav', value: d.tags.hasNav ? '\u2713 Yes' : '\u2014 No', cls: d.tags.hasNav ? 'ok' : 'warn' },
+      { label: 'Libraries', value: escapeHTML(libs), cls: 'ok' }
+    ];
+    qs('statsRow').innerHTML = stats.map(function(s) {
+      return '<div class="stat-item"><div class="stat-label">' + s.label + '</div><div class="stat-value ' + s.cls + '">' + s.value + '</div></div>';
+    }).join('');
+    qs('htmlPreview').textContent = d.htmlPreview || '';
+    qs('htmlCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── URL MODE: clone ──────────────────────────────────────────
+  window.convertHTML = async function() {
+    if (!currentURL) return;
+    var useTailwind = qs('tailwindCheck').checked;
+    var useConf = qs('confCheck').checked;
+    setStatus('convertStatus', 'loading',
+      'Calling /api/convert \u2014 cloning into Streak' +
+      (useTailwind ? ' + Tailwind via LLM' : '') +
+      (useConf ? ' + building project and measuring confidence' : '') +
+      ' (can take a few minutes) \u2026');
+    qs('convertBtn').disabled = true;
+
+    if (!P.chain) { pBegin(); }  // fetch step skipped/reset: start a fresh log
+    pRun({
+      label: 'Streak conversion initiated\u2026', stages: URL_STAGES, stage: 2,
+      steps: convertSteps(useTailwind, useConf), from: 40, to: 97
+    });
+    plog('Options: tailwind=' + useTailwind + ', confidence=' + useConf);
+
+    try {
+      var thr = parseFloat(qs('thresholdInput').value);
+      var res = await fetch(API + '/api/convert', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: currentURL,
+          tailwind: useTailwind,
+          compare_confidence: useConf,
+          confidence_threshold: isNaN(thr) ? null : thr
+        })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Conversion failed');
+
+      bundle = data;
+      renderOutput('Cloned Streak Project');
+      var msg = '\u2705 Streak project cloned!';
+      if (useTailwind && !data.tailwind) msg += ' (Tailwind skipped: OPENROUTER_API_KEY not set on server)';
+      if (data.tailwind) {
+        var fb = data.tailwindFallbackSections || [];
+        msg += ' Tailwind applied' + (fb.length ? '; kept original CSS for: ' + fb.join(', ') : ' to all sections') + '.';
+      }
+      if (data.confidence) {
+        if (data.confidence.error) {
+          msg += ' Confidence failed (details above).';
+        } else {
+          msg += ' Confidence ' + data.confidence.score + '% (' +
+            (data.confidence.passed ? 'passed' : 'below threshold') + ').';
+        }
+      }
+      setStatus('convertStatus', 'success', msg);
+      setStep(3, 'done'); setStep(4, 'done');
+
+      // real facts from the response
+      var names = Object.keys(data.components || {});
+      plog(names.length + ' widgets generated: ' + names.slice(0, 8).join(', ') + (names.length > 8 ? '\u2026' : ''));
+      plog(data.fileCount + ' files packaged' + (data.capturedScriptCount ? ', ' + data.capturedScriptCount + ' scripts captured' : ''));
+      if (useTailwind) {
+        plog(data.tailwind ? 'Tailwind conversion applied' : 'Tailwind skipped (no API key on server)', data.tailwind ? 'ok' : 'info');
+      }
+      if (data.confidence) {
+        if (data.confidence.error) plog('Confidence: ' + data.confidence.error, 'err');
+        else plog('Confidence ' + data.confidence.score + '% \u2014 ' + data.confidence.label +
+                  (data.confidence.passed ? ' (passed)' : ' (below threshold)'), data.confidence.passed ? 'ok' : 'err');
+      }
+      pDone({ label: 'Completed', pct: 100, final: true });
+    } catch (err) {
+      setStatus('convertStatus', 'error', '\u274C ' + err.message);
+      pFail('Conversion failed: ' + err.message);
+    } finally {
+      qs('convertBtn').disabled = false;
+    }
+  };
+
+  // ── AI: image upload ─────────────────────────────────────────
+  var dropzone = qs('dropzone');
+  var imageInput = qs('imageInput');
+  imageInput.addEventListener('change', function() {
+    if (imageInput.files && imageInput.files[0]) handleFile(imageInput.files[0]);
+  });
+  dropzone.addEventListener('dragover', function(e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', function() { dropzone.classList.remove('dragover'); });
+  dropzone.addEventListener('drop', function(e) {
+    e.preventDefault(); dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  function handleFile(file) {
+    if (!file.type.startsWith('image/')) { alert('Please upload an image file.'); return; }
+    uploadedFile = file;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      qs('imagePreviewImg').src = e.target.result;
+      qs('imagePreviewWrap').style.display = 'block';
+      qs('imageFilename').textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+    };
+    reader.readAsDataURL(file);
+    qs('generateImageBtn').disabled = false;
+  }
+
+  // ── AI: generate from text ───────────────────────────────────
+  window.generateFromText = async function() {
+    var description = qs('descriptionInput').value.trim();
+    if (!description) { alert('Please describe the website you want.'); return; }
+    var siteName = qs('siteNameInput').value.trim();
+
+    setStatus('textStatus', 'loading', 'Calling OpenRouter \u2014 generating your Streak project \u2026 this can take up to a minute.');
+    qs('generateTextBtn').disabled = true;
+
+    pBegin();
+    pRun({ label: 'Request sent \u2014 AI is generating\u2026', stages: TEXT_STAGES, stage: 0, steps: TEXT_STEPS, from: 3, to: 97 });
+    plog('Description: ' + description.slice(0, 80) + (description.length > 80 ? '\u2026' : ''));
+
+    try {
+      var res = await fetch(API + '/api/ai/generate-from-text', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description, site_name: siteName || null })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Generation failed');
+      bundle = data;
+      renderOutput('AI-Generated Streak Project');
+      setStatus('textStatus', 'success', '\u2705 Website generated!');
+      var n = Object.keys(data.components || {}).length;
+      plog(n + ' components generated');
+      pDone({ label: 'Completed', pct: 100, final: true });
+    } catch (err) {
+      setStatus('textStatus', 'error', '\u274C ' + err.message);
+      pFail('Generation failed: ' + err.message);
+    } finally {
+      qs('generateTextBtn').disabled = false;
+    }
+  };
+
+  // ── AI: generate from image ──────────────────────────────────
+  window.generateFromImage = async function() {
+    if (!uploadedFile) { alert('Please upload a screenshot first.'); return; }
+    var notes = qs('imageNotesInput').value.trim();
+
+    setStatus('imageStatus', 'loading', 'Calling OpenRouter (vision) \u2014 analyzing screenshot \u2026 this can take up to a minute.');
+    qs('generateImageBtn').disabled = true;
+
+    pBegin();
+    pRun({ label: 'Uploading screenshot\u2026', stages: IMG_STAGES, stage: 0, steps: IMG_STEPS, from: 3, to: 97 });
+    plog('File: ' + uploadedFile.name + ' (' + (uploadedFile.size / 1024).toFixed(1) + ' KB)');
+
+    try {
+      var fd = new FormData();
+      fd.append('file', uploadedFile);
+      if (notes) fd.append('notes', notes);
+      var res = await fetch(API + '/api/ai/generate-from-image', { method: 'POST', body: fd });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Generation failed');
+      bundle = data;
+      renderOutput('AI-Cloned Streak Project');
+      setStatus('imageStatus', 'success', '\u2705 Design cloned!');
+      var n = Object.keys(data.components || {}).length;
+      plog(n + ' components generated');
+      pDone({ label: 'Completed', pct: 100, final: true });
+    } catch (err) {
+      setStatus('imageStatus', 'error', '\u274C ' + err.message);
+      pFail('Generation failed: ' + err.message);
+    } finally {
+      qs('generateImageBtn').disabled = false;
+    }
+  };
+
+  // ── SHARED OUTPUT ────────────────────────────────────────────
+  function renderOutput(title) {
+    qs('outputCard').classList.remove('hidden');
+    qs('outputTitle').textContent = title;
+
+    var names = Object.keys(bundle.components || {});
+    qs('siteMeta').textContent =
+      (bundle.title || bundle.siteId) + '  \u2022  ' + names.length + ' component' + (names.length !== 1 ? 's' : '') + '  \u2022  entry: App.jsx';
+
+    renderConfidence(bundle.confidence);
+
+    qs('previewUrl').textContent = bundle.siteId || 'preview';
+    qs('previewFrame').srcdoc = bundle.previewHtml || '';
+
+    qs('appOutput').innerHTML = escapeHTML(bundle.appCode || '');
+    qs('appLines').textContent = lineCount(bundle.appCode || '');
+    qs('cssOutput').innerHTML = escapeHTML(bundle.indexCssCode || '');
+    qs('cssLines').textContent = lineCount(bundle.indexCssCode || '');
+
+    var picker = qs('componentPicker');
+    picker.innerHTML = names.map(function(n, i) {
+      return '<button class="tab' + (i === 0 ? ' active' : '') + '" onclick="selectComponent(\'' + n + '\', this)">' + n + '</button>';
+    }).join('');
+    if (names.length) selectComponent(names[0], picker.firstElementChild);
+
+    // reset to the preview tab
+    var first = qs('outputTabs').firstElementChild;
+    showTab('preview', first);
+
+    qs('outputCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderConfidence(c) {
+    var box = qs('confBox');
+    if (!c) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    if (c.error) {
+      box.innerHTML = '<div class="conf-note">\u26A0 ' + escapeHTML(c.error) + '</div>';
+      return;
+    }
+    var cls = c.score >= 90 ? 'ok' : (c.score >= c.threshold ? 'warn' : 'bad');
+    var metrics = Object.keys(c.metrics).map(function(k) {
+      var m = c.metrics[k];
+      return '<div class="stat-item"><div class="stat-label">' + k + '</div>' +
+        '<div class="stat-value ' + (m.passed ? 'ok' : 'bad') + '">' + m.score + '%</div>' +
+        '<div class="conf-note">min ' + m.threshold + '% \u2022 weight ' + Math.round(m.weight * 100) + '%</div></div>';
+    }).join('');
+    box.innerHTML =
+      '<div class="conf-head">' +
+        '<div class="conf-score ' + cls + '">' + c.score + '%</div>' +
+        '<span class="conf-pill ' + (c.passed ? 'pass' : 'fail') + '">' +
+          (c.passed ? '\u2713 PASSED' : '\u2717 BELOW THRESHOLD') + ' (' + c.threshold + '%)</span>' +
+        '<span class="conf-pill">' + escapeHTML(c.label) + '</span>' +
+      '</div>' +
+      '<div class="conf-bar"><div class="conf-fill" style="width:' + Math.min(c.score, 100) + '%"></div>' +
+        '<div class="conf-mark" style="left:' + Math.min(c.threshold, 100) + '%"></div></div>' +
+      '<div class="conf-note">' + escapeHTML(c.basis || '') + '</div>' +
+      '<div class="stats-row">' + metrics + '</div>';
+  }
+
+  window.selectComponent = function(name, btn) {
+    if (btn) {
+      qs('componentPicker').querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+    var code = (bundle.components || {})[name] || '';
+    qs('componentOutput').innerHTML = escapeHTML(code);
+    qs('componentLines').textContent = lineCount(code);
+    qs('componentFilename').textContent = 'src/components/' + name + '.jsx';
+  };
+
+  window.showTab = function(name, btn) {
+    qs('outputTabs').querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    btn.classList.add('active');
+    ['previewPane', 'appPane', 'componentsPane', 'cssPane'].forEach(function(id) {
+      qs(id).classList.toggle('hidden', id !== name + 'Pane');
+    });
+  };
+
+  window.copyCode = function(id, btn) {
+    navigator.clipboard.writeText(qs(id).innerText).then(function() {
+      btn.textContent = '\u2713 Copied!'; btn.classList.add('copied');
+      setTimeout(function() { btn.textContent = '\u2398 Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  };
+
+  window.downloadZip = function() {
+    if (!bundle || !bundle.downloadUrl) return;
+    var a = document.createElement('a');
+    a.href = API + bundle.downloadUrl;
+    a.download = (bundle.siteId || 'site') + '.zip';
+    a.click();
+  };
+
+  window.resetAll = function() {
+    currentURL = ''; bundle = null; uploadedFile = null;
+    qs('urlInput').value = '';
+    qs('descriptionInput').value = '';
+    qs('siteNameInput').value = '';
+    qs('imageNotesInput').value = '';
+    qs('imagePreviewWrap').style.display = 'none';
+    qs('generateImageBtn').disabled = true;
+    qs('htmlCard').classList.add('hidden');
+    qs('outputCard').classList.add('hidden');
+    qs('confBox').classList.add('hidden');
+    pHide();
+    setStatus('fetchStatus', 'idle', 'Ready \u2014 enter any public URL above');
+    setStatus('textStatus', 'idle', 'Ready \u2014 describe the site you want above');
+    setStatus('imageStatus', 'idle', 'Ready \u2014 upload a screenshot above');
+    [1, 2, 3, 4].forEach(function(n) { setStep(n, n === 1 ? 'active' : ''); });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    qs('urlInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') window.fetchHTML();
+    });
+  });
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+USER ENTERS WEBSITE URL
+          ↓
+      /api/fetch
+          ↓
+   Try HTTPX Request
+          ↓
+    Did it work?
+      ↙       ↘
+    YES        NO
+     ↓          ↓
+Extract HTML   Playwright
+     ↓          ↓
+     └────→ Rendered HTML
+                  ↓
+          BeautifulSoup
+                  ↓
+          Extract Content
+                  ↓
+           /api/convert
+                  ↓
+            Build Prompt
+                  ↓
+                 AI
+                  ↓
+       Generate Streak.js
+                  ↓
+          Validate JSON
+                  ↓
+       Create Project Files
+                  ↓
+        Generate Preview HTML
+                  ↓
+          Create ZIP File
+                  ↓
+          Download Project
+

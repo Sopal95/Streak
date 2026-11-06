@@ -1,0 +1,35 @@
+{
+  "name": "hello-streak-app",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "python3 server.py",
+    "css-build": "tailwindcss -i ./src/common/styles/input.css -o ./public/styles/tailwind.css",
+    "css-dev": "tailwindcss -i ./src/common/styles/input.css -o ./public/styles/tailwind.css --watch",
+    "dev:streak": "streak-forge dev",
+    "dev": "concurrently -k -n TAILWIND,STREAK -c blue,green \"bun run css-dev\" \"bun run dev:streak\"",
+    "build": "bun run css-build && streak-forge pre-build",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "validate": "bun run src/scripts/streak-validate.ts",
+    "verify": "bun install --frozen-lockfile && bun run lint && bun run typecheck && bun run build && bun run validate && bun run test",
+    "test-render": "bun run src/scripts/test-render.ts"
+  },
+  "dependencies": {
+    "streak-forge": "beta"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "bun": "^1.2.21",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "tailwindcss": "^3.4.17"
+  }
+}
