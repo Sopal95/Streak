@@ -95,6 +95,7 @@ class ConvertRequest(BaseModel):
     confidence_threshold: Optional[float] = None
     build_check: bool = False
     keep_js: bool = False
+    callbackUrl: Optional[str] = None
 
 
 @app.get("/")
