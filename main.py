@@ -4,6 +4,7 @@ import os
 import json
 import uuid
 import shutil
+import base64
 import hashlib
 import zipfile
 import asyncio
@@ -63,16 +64,42 @@ NET_DEBUG = os.getenv("RENDER_NET_DEBUG", "1") == "1"
 MIN_RENDER_TEXT_CHARS = int(os.getenv("MIN_RENDER_TEXT_CHARS", "300"))
 MIN_RENDER_TAGS = int(os.getenv("MIN_RENDER_TAGS", "30"))
 
+STEALTH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+]
+
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-IN', 'en-US', 'en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+window.chrome = window.chrome || {runtime: {}};
+"""
+
 
 def _launch_kwargs() -> dict:
-    """Playwright chromium.launch() kwargs (proxy only when configured)."""
-    if not RENDER_PROXY:
-        return {}
-    proxy = {"server": RENDER_PROXY}
-    if RENDER_PROXY_USER:
-        proxy["username"] = RENDER_PROXY_USER
-        proxy["password"] = RENDER_PROXY_PASS
-    return {"proxy": proxy}
+    """Playwright chromium.launch() kwargs (stealth args always, proxy only when configured)."""
+    kw: dict = {"args": STEALTH_ARGS}
+    if RENDER_PROXY:
+        proxy = {"server": RENDER_PROXY}
+        if RENDER_PROXY_USER:
+            proxy["username"] = RENDER_PROXY_USER
+            proxy["password"] = RENDER_PROXY_PASS
+        kw["proxy"] = proxy
+    return kw
+
+
+async def _new_context(browser):
+    ctx = await browser.new_context(
+        user_agent=UA,
+        viewport={"width": 1440, "height": 900},
+        locale="en-IN",
+        timezone_id="Asia/Kolkata",
+        extra_http_headers={"Accept-Language": "en-IN,en;q=0.9"},
+    )
+    await ctx.add_init_script(STEALTH_JS)
+    return ctx
 
 
 def _proxy_url() -> Optional[str]:
@@ -151,6 +178,7 @@ class FetchRequest(BaseModel):
 
 class ConvertRequest(BaseModel):
     url: str
+    html: Optional[str] = None   # pre-rendered page (e.g. saved with SingleFile)
     tailwind: bool = True
     compare_confidence: bool = True
     confidence_threshold: Optional[float] = None
@@ -163,6 +191,7 @@ class ConvertRequest(BaseModel):
 async def root():
     return FileResponse("static/index.html")
 
+
 async def render_page(
     url: str,
     timeout_ms: int = 45000,
@@ -173,7 +202,7 @@ async def render_page(
     async with async_playwright() as p:
         browser = await p.chromium.launch(**_launch_kwargs())
         try:
-            context = await browser.new_context(user_agent=UA, viewport={"width": 1440, "height": 900})
+            context = await _new_context(browser)
             page = await context.new_page()
 
             if NET_DEBUG:
@@ -188,6 +217,13 @@ async def render_page(
                 pass
             try:
                 await page.wait_for_load_state("networkidle", timeout=networkidle_timeout_ms)
+            except PlaywrightTimeoutError:
+                pass
+            try:
+                await page.wait_for_function(
+                    "document.body && document.body.innerText.trim().length > 300",
+                    timeout=15000,
+                )
             except PlaywrightTimeoutError:
                 pass
             try:
@@ -290,6 +326,7 @@ def _detect_libraries(script_srcs: list[str], html: str) -> list[str]:
         if any(pattern in h for h in haystacks):
             found.add(label)
     return sorted(found)
+
 
 CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)")
 FONT_EXTS = {".woff", ".woff2", ".ttf", ".otf", ".eot"}
@@ -510,6 +547,52 @@ async def _download_and_localize_assets(soup: BeautifulSoup, css: str, project_d
         tag["style"] = CSS_URL_RE.sub(_swap, tag["style"])
 
     return CSS_URL_RE.sub(_swap, css)
+
+
+DATA_URI_RE = re.compile(r"data:([\w.+-]+/[\w.+-]+);base64,([A-Za-z0-9+/=]+)")
+_MIME_EXT = {
+    "image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/webp": ".webp",
+    "image/gif": ".gif", "image/svg+xml": ".svg", "image/avif": ".avif",
+    "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico",
+    "font/woff2": ".woff2", "font/woff": ".woff", "font/ttf": ".ttf", "font/otf": ".otf",
+    "application/font-woff2": ".woff2", "application/font-woff": ".woff",
+    "application/x-font-ttf": ".ttf", "application/x-font-woff": ".woff",
+    "application/vnd.ms-fontobject": ".eot",
+}
+
+
+def _localize_data_uris(soup: BeautifulSoup, css: str, project_dir: Path) -> str:
+    """Move base64 data: URIs (SingleFile output) into public/ files and
+    rewrite references to root-absolute paths. Mutates soup, returns new CSS."""
+    cache: dict[str, str] = {}
+
+    def save(m):
+        mime, b64 = m.group(1).lower(), m.group(2)
+        ext = _MIME_EXT.get(mime)
+        if not ext or len(b64) < 200:
+            return m.group(0)
+        digest = hashlib.md5(b64.encode()).hexdigest()[:10]
+        if digest in cache:
+            return cache[digest]
+        try:
+            data = base64.b64decode(b64 + "=" * (-len(b64) % 4))
+        except Exception:
+            return m.group(0)
+        sub = "assets/fonts" if ext in FONT_EXTS else "images"
+        name = f"inline-{digest}{ext}"
+        if sub == "images":
+            data = _recompress_image(name, data)
+        out_dir = project_dir / "public" / sub
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / name).write_bytes(data)
+        cache[digest] = f"/{sub}/{name}"
+        return cache[digest]
+
+    for tag in soup.find_all(True):
+        for k, v in list(tag.attrs.items()):
+            if isinstance(v, str) and "data:" in v:
+                tag.attrs[k] = DATA_URI_RE.sub(save, v)
+    return DATA_URI_RE.sub(save, css)
 
 
 def _optimize_img_tags(soup: BeautifulSoup, project_dir: Path) -> None:
@@ -832,6 +915,7 @@ def _widget_tsx(name: str, chunk_html: str) -> str:
 export default {name};
 """
 
+
 MIN_WIDGET_CHARS = 600
 WRAPPER_TAGS = ("div", "main", "section", "article", "form")
 SECTION_TAGS = {"header", "nav", "footer", "aside", "section", "article", "form", "main"}
@@ -990,6 +1074,7 @@ def _flatten_widgets(nodes: list):
         else:
             yield from _flatten_widgets(n[2])
 
+
 def _layout_node_lines(nodes: list, depth: int) -> list[str]:
     pad = "  " * depth
     out: list[str] = []
@@ -1081,6 +1166,7 @@ def _head_data(head_tags: list[Tag], base_url: str) -> tuple[list[dict], list[di
             l["href"] = urljoin(base_url, l["href"])
             links.append(l)
     return meta, links
+
 
 PAGE_HEAD_TSX = """type PageHeadProps = {
   data?: {
@@ -1426,6 +1512,8 @@ async def _css_chunk_to_tailwind(client: httpx.AsyncClient, idx: int, chunk: str
         )
     print(f"[css->tailwind chunk {idx}] failed, keeping original CSS for this chunk")
     return None
+
+
 _PX2KEY = {0: "0", 1: "px", 2: "0.5", 4: "1", 6: "1.5", 8: "2", 10: "2.5", 12: "3", 14: "3.5",
            16: "4", 20: "5", 24: "6", 28: "7", 32: "8", 36: "9", 40: "10", 44: "11", 48: "12",
            56: "14", 64: "16", 80: "20", 96: "24", 112: "28", 128: "32", 144: "36", 160: "40",
@@ -1519,6 +1607,7 @@ def _tw_decl(prop: str, val: str) -> Optional[str]:
             return f"{y} {x}" if y and x else None
     return None
 
+
 _UTIL_RE = re.compile(
     r"^\.-?(?:[mp][trblxy]?|gap(?:-[xy])?|[wh]|(?:min|max)-[wh]|z|inset(?:-[xy])?|top|left|right|bottom|"
     r"col-span|grid-cols|space-[xy]|duration|opacity|rounded(?:-[a-z]{1,2})?|border(?:-[trblxy])?|text|font|"
@@ -1538,6 +1627,7 @@ def _is_util_sel(sel: str) -> bool:
         ("\\" in p or _UTIL_RE.match(p)) and not p.startswith(".cursor-dot")
         for p in parts
     )
+
 
 def _selector_classes(sel: str) -> set[str]:
     """All class names in a selector, including escaped ones (.md\\:flex -> md:flex)."""
@@ -1587,8 +1677,10 @@ def _convert_rule(rule, compiled: bool = False) -> str:
     body = ([f"@apply {' '.join(utils)};"] if utils else []) + plain
     return f"{sel} {{\n  " + "\n  ".join(body) + "\n}"
 
+
 _APPLY_RE = re.compile(r"@apply\s+([^;]+);")
 _RULE_RE = re.compile(r"([^{}@]+)\{([^{}]*)\}")
+
 
 def _drop_circular_applies(css: str) -> str:
     """Last line of defense: remove only the @apply tokens that name a class
@@ -1608,6 +1700,7 @@ def _drop_circular_applies(css: str) -> str:
 
         return f"{sel}{{{_APPLY_RE.sub(ap, body)}}}"
     return _RULE_RE.sub(fix, css)
+
 
 async def _convert_css_to_input_css(css: str) -> tuple[str, list[int]]:
     compiled = "--tw-border-spacing-x" in css  # site already ships compiled Tailwind
@@ -1629,6 +1722,7 @@ async def _convert_css_to_input_css(css: str) -> tuple[str, list[int]]:
     )
     input_css = _drop_circular_applies(input_css)
     return input_css, []
+
 
 _PREVIEW_FORCE_VISIBLE_CSS = """
 /* static-preview-only: no JS runtime here, so force reveal-on-scroll content visible.
@@ -1667,6 +1761,7 @@ def _build_preview_html(title: str, head_tags: list[Tag], css: str, body_html: s
 {body_html}
 </body>
 </html>"""
+
 
 DEFAULT_MIN_CONFIDENCE = float(os.getenv("CLONE_MIN_CONFIDENCE", "80"))
 
@@ -1770,17 +1865,21 @@ async def _scroll_through(page) -> None:
         pass
 
 
-async def _measure_clone_confidence(url: str, preview_html: str, min_confidence: float) -> dict:
-    """Render the original URL and the static preview in the same 1440px
-    viewport and score the match. Never raises."""
+async def _measure_clone_confidence(url: str, preview_html: str, min_confidence: float,
+                                    original_html: Optional[str] = None) -> dict:
+    """Render the original (live URL, or the uploaded HTML when given) and the
+    static preview in the same 1440px viewport and score the match. Never raises."""
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(**_launch_kwargs())
             try:
-                context = await browser.new_context(user_agent=UA, viewport={"width": 1440, "height": 900})
+                context = await _new_context(browser)
 
                 orig = await context.new_page()
-                await orig.goto(url, timeout=45000, wait_until="domcontentloaded")
+                if original_html:
+                    await orig.set_content(original_html, wait_until="load", timeout=45000)
+                else:
+                    await orig.goto(url, timeout=45000, wait_until="domcontentloaded")
                 try:
                     await orig.wait_for_load_state("networkidle", timeout=8000)
                 except PlaywrightTimeoutError:
@@ -1859,6 +1958,7 @@ async def _build_streak_project(project_dir: Path) -> Optional[str]:
     finally:
         shutil.rmtree(project_dir / "node_modules", ignore_errors=True)
 
+
 def _static_index_html(title, head_tags, html_tag, body_tag, body_html, script_entries, preload: str = "") -> str:
     head_extra = "\n".join(str(t) for t in head_tags)
     html_attrs = _tag_to_html_attr_str(html_tag) if html_tag is not None else 'lang="en"'
@@ -1909,15 +2009,22 @@ async def _run_conversion(req: ConvertRequest) -> dict:
       src/widgets/LegacyScripts.tsx    Script widget that replays the site's original JS (keep_js only)
       src/common/styles/input.css      site CSS converted to Tailwind @apply (rule-based)
       public/{images,assets,styles}    localized images, fonts, scripts and CSS
+
+    If req.html is given (e.g. a SingleFile-saved page), it is used instead of
+    rendering req.url, so geo-blocked / bot-protected sites still work.
     """
     url = req.url.strip()
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
-    try:
-        html, status_code = await render_page(url)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to render {url}: {e}")
+    if req.html and req.html.strip():
+        html, status_code = req.html, 200
+        print(f"[render] using uploaded HTML for {url} ({len(html)} chars)")
+    else:
+        try:
+            html, status_code = await render_page(url)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to render {url}: {e}")
 
     soup = BeautifulSoup(html, "html.parser")
 
@@ -1927,10 +2034,13 @@ async def _run_conversion(req: ConvertRequest) -> dict:
     print(f"[render] {url} status={status_code} html={len(html)} text={text_len} tags={n_tags}")
 
     if status_code >= 400 or text_len < MIN_RENDER_TEXT_CHARS or n_tags < MIN_RENDER_TAGS:
+        snippet = soup.get_text(" ", strip=True)[:200]
+        page_title = soup.title.get_text(strip=True) if soup.title else ""
+        print(f"[render-fail] title={page_title!r} text={snippet!r}")
         raise HTTPException(
             status_code=502,
-            detail=f"Page did not render properly (status={status_code}, text={text_len} chars, tags={n_tags}). "
-                   f"The site may be blocking this server or the page did not finish loading.",
+            detail=f"Page did not render properly (status={status_code}, text={text_len} chars, tags={n_tags}, "
+                   f"title={page_title!r}, text={snippet!r}). The site may be blocking this server.",
         )
     # --- end check ---
 
@@ -1972,6 +2082,7 @@ async def _run_conversion(req: ConvertRequest) -> dict:
     pkg = _bootstrap_project(project_dir)
 
     css = await _download_and_localize_assets(soup, css, project_dir)
+    css = _localize_data_uris(soup, css, project_dir)
     css += "\n" + PERF_CSS
     script_entries = await _download_and_localize_scripts(captured_scripts, project_dir)
 
@@ -2081,7 +2192,7 @@ async def _run_conversion(req: ConvertRequest) -> dict:
     confidence = None
     if req.compare_confidence:
         min_conf = req.confidence_threshold if req.confidence_threshold is not None else DEFAULT_MIN_CONFIDENCE
-        confidence = await _measure_clone_confidence(url, preview_html, min_conf)
+        confidence = await _measure_clone_confidence(url, preview_html, min_conf, req.html)
 
     return {
         "format": "streak",
@@ -2102,6 +2213,7 @@ async def _run_conversion(req: ConvertRequest) -> dict:
         "confidence": confidence,
         "build": build,
     }
+
 
 async def _post_callback(callback_url: str, payload: dict) -> None:
     """POST the payload to the callback URL, retrying with backoff.
@@ -2162,6 +2274,7 @@ async def download_react_project(site_id: str):
     if not zip_path.is_file():
         raise HTTPException(status_code=404, detail="Generated project not found.")
     return FileResponse(zip_path, filename=f"{site_id}.zip", media_type="application/zip")
+
 
 app.include_router(ai_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
