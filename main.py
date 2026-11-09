@@ -10,13 +10,13 @@ import asyncio
 from collections import Counter
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, quote as _urlquote
 
 import httpx
 import tinycss2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from bs4 import BeautifulSoup, Tag
@@ -44,6 +44,65 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+# ---------------------------------------------------------------------------
+# Optional proxy (e.g. an Indian exit IP for geo-blocked sites).
+# Set on the host (Render -> Environment):
+#   RENDER_PROXY=http://host:port
+#   RENDER_PROXY_USER=...   RENDER_PROXY_PASS=...   (only if the proxy needs login)
+# When RENDER_PROXY is not set, everything behaves exactly as before.
+# ---------------------------------------------------------------------------
+RENDER_PROXY = os.getenv("RENDER_PROXY", "")
+RENDER_PROXY_USER = os.getenv("RENDER_PROXY_USER", "")
+RENDER_PROXY_PASS = os.getenv("RENDER_PROXY_PASS", "")
+
+# Set RENDER_NET_DEBUG=1 to log failed/4xx requests and browser console errors.
+NET_DEBUG = os.getenv("RENDER_NET_DEBUG", "1") == "1"
+
+# Render sanity check thresholds (page considered "not rendered" below these).
+MIN_RENDER_TEXT_CHARS = int(os.getenv("MIN_RENDER_TEXT_CHARS", "300"))
+MIN_RENDER_TAGS = int(os.getenv("MIN_RENDER_TAGS", "30"))
+
+
+def _launch_kwargs() -> dict:
+    """Playwright chromium.launch() kwargs (proxy only when configured)."""
+    if not RENDER_PROXY:
+        return {}
+    proxy = {"server": RENDER_PROXY}
+    if RENDER_PROXY_USER:
+        proxy["username"] = RENDER_PROXY_USER
+        proxy["password"] = RENDER_PROXY_PASS
+    return {"proxy": proxy}
+
+
+def _proxy_url() -> Optional[str]:
+    """Proxy URL for httpx, with credentials embedded when provided."""
+    if not RENDER_PROXY:
+        return None
+    if not RENDER_PROXY_USER:
+        return RENDER_PROXY
+    p = urlparse(RENDER_PROXY)
+    auth = f"{_urlquote(RENDER_PROXY_USER, safe='')}:{_urlquote(RENDER_PROXY_PASS, safe='')}@"
+    return p._replace(netloc=auth + p.netloc).geturl()
+
+
+def _http_client(**kwargs) -> httpx.AsyncClient:
+    """httpx client that goes through the proxy when one is configured.
+    Handles both httpx>=0.26 (proxy=) and older (proxies=)."""
+    proxy = _proxy_url()
+    if not proxy:
+        return httpx.AsyncClient(**kwargs)
+    try:
+        return httpx.AsyncClient(proxy=proxy, **kwargs)
+    except TypeError:
+        return httpx.AsyncClient(proxies=proxy, **kwargs)
+
+
+def _safe_url(u: str) -> str:
+    """URL without query string (callback URLs carry secret tokens)."""
+    p = urlparse(u)
+    return p._replace(query="", fragment="").geturl() + (" (+query)" if p.query else "")
+
 
 KNOWN_LIB_PATTERNS = {
     "aos": "AOS (scroll reveal)",
@@ -83,6 +142,8 @@ TRACKER_IFRAME_HINTS = ("googletagmanager", "doubleclick", "facebook", "google-a
 MAX_IMG_WIDTH = 1080
 IMG_QUALITY = 70
 
+CALLBACK_RETRIES = 3
+
 
 class FetchRequest(BaseModel):
     url: str
@@ -110,10 +171,16 @@ async def render_page(
     """Render the live page with a real browser and return the final,
     post-JS DOM plus the navigation's HTTP status."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(**_launch_kwargs())
         try:
             context = await browser.new_context(user_agent=UA, viewport={"width": 1440, "height": 900})
             page = await context.new_page()
+
+            if NET_DEBUG:
+                page.on("requestfailed", lambda r: print(f"[net-fail] {r.url} {r.failure}"))
+                page.on("response", lambda r: print(f"[net] {r.status} {r.url}") if r.status >= 400 else None)
+                page.on("console", lambda m: print(f"[console] {m.type}: {m.text}") if m.type == "error" else None)
+
             response = await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
             try:
                 await page.wait_for_load_state("load", timeout=timeout_ms)
@@ -173,7 +240,7 @@ async def fetch_html(req: FetchRequest):
 
     html, status_code, used_playwright = None, None, False
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        async with _http_client(follow_redirects=True, timeout=15) as client:
             response = await client.get(url, headers=headers)
         status_code = response.status_code
         html = response.text
@@ -283,7 +350,7 @@ async def inline_all_css(soup: BeautifulSoup, base_url: str) -> str:
     hrefs_in_order = [urljoin(base_url, n["href"]) for n in css_nodes if _is_stylesheet_link(n)]
 
     fetched: dict[str, str] = {}
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    async with _http_client(follow_redirects=True) as client:
         for href in hrefs_in_order:
             if href in fetched:
                 continue
@@ -397,7 +464,7 @@ async def _download_and_localize_assets(soup: BeautifulSoup, css: str, project_d
         return css
 
     url_map: dict[str, str] = {}
-    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+    async with _http_client(follow_redirects=True, timeout=15) as client:
         for u in candidates:
             try:
                 r = await client.get(u, headers={"User-Agent": UA, "Referer": u})
@@ -560,7 +627,7 @@ async def _download_and_localize_scripts(scripts: list[CapturedScript], project_
     ordered: list[dict] = []
     inline_counter = 0
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
+    async with _http_client(follow_redirects=True, timeout=20) as client:
         for s in scripts:
             kind = "module" if s.attrs.get("type") == "module" else "classic"
             if s.kind == "external":
@@ -1708,7 +1775,7 @@ async def _measure_clone_confidence(url: str, preview_html: str, min_confidence:
     viewport and score the match. Never raises."""
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch()
+            browser = await p.chromium.launch(**_launch_kwargs())
             try:
                 context = await browser.new_context(user_agent=UA, viewport={"width": 1440, "height": 900})
 
@@ -1831,8 +1898,7 @@ def _strip_tracker_markup(body: Tag) -> None:
         s.extract()
 
 
-@app.post("/api/convert")
-async def convert_to_streak(req: ConvertRequest):
+async def _run_conversion(req: ConvertRequest) -> dict:
     """Clone the rendered page into a Streak.js project
 
       streak.sitemap.json              one page ("/") listing PageHead + one widget per section
@@ -1849,11 +1915,25 @@ async def convert_to_streak(req: ConvertRequest):
         url = "https://" + url
 
     try:
-        html, _status_code = await render_page(url)
+        html, status_code = await render_page(url)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to render {url}: {e}")
 
     soup = BeautifulSoup(html, "html.parser")
+
+    # --- render sanity check: fail loudly instead of producing a junk project ---
+    text_len = len(soup.get_text(strip=True))
+    n_tags = len(soup.find_all())
+    print(f"[render] {url} status={status_code} html={len(html)} text={text_len} tags={n_tags}")
+
+    if status_code >= 400 or text_len < MIN_RENDER_TEXT_CHARS or n_tags < MIN_RENDER_TAGS:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Page did not render properly (status={status_code}, text={text_len} chars, tags={n_tags}). "
+                   f"The site may be blocking this server or the page did not finish loading.",
+        )
+    # --- end check ---
+
     _resolve_lazy_attrs(soup)
     css = await inline_all_css(soup, url)
     _absolutize_dom_urls(soup, url)
@@ -1873,7 +1953,7 @@ async def convert_to_streak(req: ConvertRequest):
         [s.src for s in captured_scripts if s.kind == "external"], html,
     )
     if not req.keep_js:
-        captured_scripts = []  # static exact copy: ship zero JS (best TBT)
+        captured_scripts = []
 
     _strip_tracker_markup(body)
     for tag in [t for t in body.find_all("style") if not t.find_parent("svg")]:
@@ -2022,6 +2102,56 @@ async def convert_to_streak(req: ConvertRequest):
         "confidence": confidence,
         "build": build,
     }
+
+async def _post_callback(callback_url: str, payload: dict) -> None:
+    """POST the payload to the callback URL, retrying with backoff.
+    Never goes through the render proxy. The URL is logged without its query
+    string because callback URLs often carry secret tokens."""
+    job_id = payload.get("jobId")
+    shown = _safe_url(callback_url)
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        for attempt in range(1, CALLBACK_RETRIES + 1):
+            try:
+                r = await client.post(callback_url, json=payload)
+                if r.status_code < 300:
+                    print(f"[callback] job {job_id}: DELIVERED to {shown} "
+                          f"(HTTP {r.status_code}, attempt {attempt})")
+                    return
+                print(f"[callback] job {job_id}: attempt {attempt} got HTTP {r.status_code}")
+            except Exception as e:
+                print(f"[callback] job {job_id}: attempt {attempt} failed: {e}")
+            if attempt < CALLBACK_RETRIES:
+                await asyncio.sleep(2 ** attempt)
+    print(f"[callback] job {job_id}: GAVE UP on {shown}")
+
+
+async def _run_and_callback(req: ConvertRequest, job_id: str) -> None:
+    """Run the conversion, then deliver the outcome (success or failure) to callbackUrl."""
+    print(f"[job {job_id}] started: {req.url}")
+    try:
+        result = await _run_conversion(req)
+        payload = {"jobId": job_id, "status": "completed", **result}
+        print(f"[job {job_id}] conversion COMPLETED (siteId={result['siteId']})")
+    except HTTPException as e:
+        payload = {"jobId": job_id, "status": "failed", "error": e.detail}
+        print(f"[job {job_id}] conversion FAILED: {e.detail}")
+    except Exception as e:
+        payload = {"jobId": job_id, "status": "failed", "error": str(e)}
+        print(f"[job {job_id}] conversion FAILED: {e}")
+    await _post_callback(req.callbackUrl, payload)
+
+
+@app.post("/api/convert")
+async def convert_to_streak(req: ConvertRequest, background_tasks: BackgroundTasks):
+    if not req.callbackUrl:
+        return await _run_conversion(req)
+
+    job_id = uuid.uuid4().hex
+    background_tasks.add_task(_run_and_callback, req, job_id)
+    return JSONResponse(
+        status_code=200,
+        content={"status": "accepted", "jobId": job_id},
+    )
 
 
 @app.get("/api/download/{site_id}")
