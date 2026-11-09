@@ -1850,11 +1850,23 @@ async def _run_conversion(req: ConvertRequest) -> dict:
         url = "https://" + url
 
     try:
-        html, _status_code = await render_page(url)
+        html, status_code = await render_page(url)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to render {url}: {e}")
 
     soup = BeautifulSoup(html, "html.parser")
+
+    text_len = len(soup.get_text(strip=True))
+    n_tags = len(soup.find_all())
+    print(f"[render] {url} status={status_code} html={len(html)} text={text_len} tags={n_tags}")
+
+    if status_code >= 400 or text_len < 300 or n_tags < 30:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Page did not render properly (status={status_code}, text={text_len} chars, tags={n_tags}). "
+                   f"The site may be blocking this server or the page did not finish loading.",
+        )
+
     _resolve_lazy_attrs(soup)
     css = await inline_all_css(soup, url)
     _absolutize_dom_urls(soup, url)
