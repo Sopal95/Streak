@@ -2025,31 +2025,36 @@ async def _run_conversion(req: ConvertRequest) -> dict:
     }
 
 async def _post_callback(callback_url: str, payload: dict) -> None:
-    """POST the payload to the callback URL, retrying with backoff."""
-    async with httpx.AsyncClient(timeout=30) as client:
+    job_id = payload.get("jobId")
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
         for attempt in range(1, CALLBACK_RETRIES + 1):
             try:
                 r = await client.post(callback_url, json=payload)
                 if r.status_code < 300:
+                    print(f"[callback] job {job_id}: DELIVERED to {callback_url} "
+                          f"(HTTP {r.status_code}, attempt {attempt})")
                     return
-                print(f"[callback] attempt {attempt}: HTTP {r.status_code}")
+                print(f"[callback] job {job_id}: attempt {attempt} got HTTP {r.status_code}")
             except Exception as e:
-                print(f"[callback] attempt {attempt} failed: {e}")
-            await asyncio.sleep(2 ** attempt)
-    print(f"[callback] giving up on {callback_url} (job {payload.get('jobId')})")
+                print(f"[callback] job {job_id}: attempt {attempt} failed: {e}")
+            if attempt < CALLBACK_RETRIES:
+                await asyncio.sleep(2 ** attempt)
+    print(f"[callback] job {job_id}: GAVE UP on {callback_url}")
 
 
 async def _run_and_callback(req: ConvertRequest, job_id: str) -> None:
-    """Run the conversion, then deliver the outcome (success or failure) to callbackUrl."""
+    print(f"[job {job_id}] started: {req.url}")
     try:
         result = await _run_conversion(req)
         payload = {"jobId": job_id, "status": "completed", **result}
+        print(f"[job {job_id}] conversion COMPLETED (siteId={result['siteId']})")
     except HTTPException as e:
         payload = {"jobId": job_id, "status": "failed", "error": e.detail}
+        print(f"[job {job_id}] conversion FAILED: {e.detail}")
     except Exception as e:
         payload = {"jobId": job_id, "status": "failed", "error": str(e)}
+        print(f"[job {job_id}] conversion FAILED: {e}")
     await _post_callback(req.callbackUrl, payload)
-
 
 @app.post("/api/convert")
 async def convert_to_streak(req: ConvertRequest, background_tasks: BackgroundTasks):
