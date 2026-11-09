@@ -14,9 +14,9 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 import tinycss2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from bs4 import BeautifulSoup, Tag
@@ -82,6 +82,8 @@ TRACKER_IFRAME_HINTS = ("googletagmanager", "doubleclick", "facebook", "google-a
 
 MAX_IMG_WIDTH = 1080
 IMG_QUALITY = 70
+
+CALLBACK_RETRIES = 3
 
 
 class FetchRequest(BaseModel):
@@ -1831,8 +1833,7 @@ def _strip_tracker_markup(body: Tag) -> None:
         s.extract()
 
 
-@app.post("/api/convert")
-async def convert_to_streak(req: ConvertRequest):
+async def _run_conversion(req: ConvertRequest) -> dict:
     """Clone the rendered page into a Streak.js project
 
       streak.sitemap.json              one page ("/") listing PageHead + one widget per section
@@ -1873,7 +1874,7 @@ async def convert_to_streak(req: ConvertRequest):
         [s.src for s in captured_scripts if s.kind == "external"], html,
     )
     if not req.keep_js:
-        captured_scripts = []  # static exact copy: ship zero JS (best TBT)
+        captured_scripts = []
 
     _strip_tracker_markup(body)
     for tag in [t for t in body.find_all("style") if not t.find_parent("svg")]:
@@ -2022,6 +2023,45 @@ async def convert_to_streak(req: ConvertRequest):
         "confidence": confidence,
         "build": build,
     }
+
+async def _post_callback(callback_url: str, payload: dict) -> None:
+    """POST the payload to the callback URL, retrying with backoff."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        for attempt in range(1, CALLBACK_RETRIES + 1):
+            try:
+                r = await client.post(callback_url, json=payload)
+                if r.status_code < 300:
+                    return
+                print(f"[callback] attempt {attempt}: HTTP {r.status_code}")
+            except Exception as e:
+                print(f"[callback] attempt {attempt} failed: {e}")
+            await asyncio.sleep(2 ** attempt)
+    print(f"[callback] giving up on {callback_url} (job {payload.get('jobId')})")
+
+
+async def _run_and_callback(req: ConvertRequest, job_id: str) -> None:
+    """Run the conversion, then deliver the outcome (success or failure) to callbackUrl."""
+    try:
+        result = await _run_conversion(req)
+        payload = {"jobId": job_id, "status": "completed", **result}
+    except HTTPException as e:
+        payload = {"jobId": job_id, "status": "failed", "error": e.detail}
+    except Exception as e:
+        payload = {"jobId": job_id, "status": "failed", "error": str(e)}
+    await _post_callback(req.callbackUrl, payload)
+
+
+@app.post("/api/convert")
+async def convert_to_streak(req: ConvertRequest, background_tasks: BackgroundTasks):
+    if not req.callbackUrl:
+        return await _run_conversion(req)
+
+    job_id = uuid.uuid4().hex
+    background_tasks.add_task(_run_and_callback, req, job_id)
+    return JSONResponse(
+        status_code=200,
+        content={"status": "accepted", "jobId": job_id},
+    )
 
 
 @app.get("/api/download/{site_id}")
